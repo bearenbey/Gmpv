@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+# Ensure src/ is on the path when running from the project directory
+_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_root, "src"))
+
+from gmpv.main import main
+
+sys.exit(main())

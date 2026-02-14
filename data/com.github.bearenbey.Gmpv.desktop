@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Gmpv
+Comment=GNOME video player powered by mpv
+Exec=gmpv %U
+Icon=com.github.bearenbey.Gmpv
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;GTK;
+MimeType=video/mp4;video/x-matroska;video/webm;video/avi;video/x-msvideo;video/quicktime;video/x-flv;video/ogg;video/mpeg;
+Keywords=video;player;mpv;
+StartupNotify=true

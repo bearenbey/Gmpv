@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.bearenbey.Gmpv</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Gmpv</name>
+  <summary>GNOME video player powered by mpv</summary>
+  <description>
+    <p>
+      Gmpv is a simple video player for the GNOME desktop that uses mpv
+      as a playback engine. It provides a clean, native GNOME interface
+      with full media key and desktop integration.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.github.bearenbey.Gmpv.desktop</launchable>
+  <url type="homepage">https://github.com/bearenbey/gmpv</url>
+  <provides>
+    <binary>gmpv</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+</component>

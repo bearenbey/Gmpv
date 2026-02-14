@@ -1,0 +1,13 @@
+[project]
+name = "gmpv"
+version = "0.1.0"
+description = "GNOME-native video player powered by mpv"
+requires-python = ">=3.11"
+dependencies = [
+    "PyGObject",
+    "python-mpv",
+]
+
+[build-system]
+requires = ["meson-python"]
+build-backend = "mesonpy"
