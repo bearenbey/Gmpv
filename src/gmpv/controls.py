@@ -18,9 +18,11 @@ def _format_time(seconds):
 
 _CONTROLS_CSS = """
 .gmpv-controls {
-    background: alpha(black, 0.7);
-    border-radius: 12px;
-    padding: 4px 8px;
+    background: alpha(black, 0.75);
+    border-radius: 16px;
+    padding: 8px 16px;
+    min-width: 400px;
+    max-width: 580px;
 }
 .gmpv-controls label {
     font-size: 11px;
@@ -33,14 +35,18 @@ _CONTROLS_CSS = """
     padding: 0;
     color: white;
 }
+.gmpv-controls .gmpv-play-button {
+    min-height: 36px;
+    min-width: 36px;
+}
 .gmpv-controls scale trough {
-    min-height: 4px;
-    border-radius: 2px;
+    min-height: 5px;
+    border-radius: 2.5px;
     background: alpha(white, 0.2);
 }
 .gmpv-controls scale trough highlight {
     background: white;
-    border-radius: 2px;
+    border-radius: 2.5px;
 }
 .gmpv-controls scale slider {
     min-width: 12px;
@@ -48,6 +54,11 @@ _CONTROLS_CSS = """
     background: white;
     border-radius: 50%;
     margin: -4px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+.gmpv-controls scale:hover slider {
+    opacity: 1;
 }
 """
 
@@ -57,13 +68,13 @@ class ControlsBar(Gtk.Box):
 
     def __init__(self, player):
         super().__init__(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            halign=Gtk.Align.FILL,
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.CENTER,
             valign=Gtk.Align.END,
             margin_start=24,
             margin_end=24,
             margin_bottom=16,
-            spacing=6,
+            spacing=4,
         )
         self._player = player
         self._seeking = False
@@ -83,59 +94,98 @@ class ControlsBar(Gtk.Box):
     def _setup_ui(self):
         self.add_css_class("gmpv-controls")
 
-        # Play/pause
-        self._play_button = Gtk.Button(icon_name="media-playback-start-symbolic")
-        self._play_button.add_css_class("flat")
-        self._play_button.add_css_class("circular")
-        self.append(self._play_button)
+        # --- Row 1: Seek bar with time labels ---
+        seek_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.append(seek_row)
 
-        # Position label
         self._position_label = Gtk.Label(label="0:00")
-        self.append(self._position_label)
+        seek_row.append(self._position_label)
 
-        # Seek bar
         self._seek_scale = Gtk.Scale(
             orientation=Gtk.Orientation.HORIZONTAL,
             hexpand=True,
             draw_value=False,
         )
         self._seek_scale.set_range(0, 100)
-        self.append(self._seek_scale)
+        seek_row.append(self._seek_scale)
 
-        # Duration label
         self._duration_label = Gtk.Label(label="0:00")
-        self.append(self._duration_label)
+        seek_row.append(self._duration_label)
 
-        # Volume
+        # --- Row 2: Transport controls ---
+        transport_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=4,
+            hexpand=True,
+        )
+        self.append(transport_row)
+
+        # Left group: volume
+        left_group = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self._volume_button = Gtk.VolumeButton()
         self._volume_button.set_value(1.0)
         self._volume_button.add_css_class("flat")
-        self.append(self._volume_button)
+        left_group.append(self._volume_button)
+        transport_row.append(left_group)
 
-        # Subtitle track
+        # Center group: skip back, play/pause, skip forward
+        center_group = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8,
+            halign=Gtk.Align.CENTER,
+            hexpand=True,
+        )
+
+        self._skip_back_button = Gtk.Button(icon_name="media-seek-backward-symbolic")
+        self._skip_back_button.add_css_class("flat")
+        self._skip_back_button.add_css_class("circular")
+        center_group.append(self._skip_back_button)
+
+        self._play_button = Gtk.Button(icon_name="media-playback-start-symbolic")
+        self._play_button.add_css_class("flat")
+        self._play_button.add_css_class("circular")
+        self._play_button.add_css_class("gmpv-play-button")
+        center_group.append(self._play_button)
+
+        self._skip_forward_button = Gtk.Button(icon_name="media-seek-forward-symbolic")
+        self._skip_forward_button.add_css_class("flat")
+        self._skip_forward_button.add_css_class("circular")
+        center_group.append(self._skip_forward_button)
+
+        transport_row.append(center_group)
+
+        # Right group: subtitle, audio, fullscreen
+        right_group = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=4,
+            halign=Gtk.Align.END,
+        )
+
         self._sub_button = Gtk.MenuButton(icon_name="media-view-subtitles-symbolic")
         self._sub_button.add_css_class("flat")
         self._sub_button.add_css_class("circular")
         self._sub_menu = Gio.Menu()
         self._sub_button.set_menu_model(self._sub_menu)
-        self.append(self._sub_button)
+        right_group.append(self._sub_button)
 
-        # Audio track
         self._audio_button = Gtk.MenuButton(icon_name="audio-speakers-symbolic")
         self._audio_button.add_css_class("flat")
         self._audio_button.add_css_class("circular")
         self._audio_menu = Gio.Menu()
         self._audio_button.set_menu_model(self._audio_menu)
-        self.append(self._audio_button)
+        right_group.append(self._audio_button)
 
-        # Fullscreen
         self._fullscreen_button = Gtk.Button(icon_name="view-fullscreen-symbolic")
         self._fullscreen_button.add_css_class("flat")
         self._fullscreen_button.add_css_class("circular")
-        self.append(self._fullscreen_button)
+        right_group.append(self._fullscreen_button)
+
+        transport_row.append(right_group)
 
     def _connect_signals(self):
         self._play_button.connect("clicked", self._on_play_pause)
+        self._skip_back_button.connect("clicked", self._on_skip_back)
+        self._skip_forward_button.connect("clicked", self._on_skip_forward)
         self._fullscreen_button.connect("clicked", self._on_fullscreen)
         self._volume_button.connect("value-changed", self._on_volume_changed)
         self._seek_scale.connect("change-value", self._on_seek_change)
@@ -148,6 +198,12 @@ class ControlsBar(Gtk.Box):
 
     def _on_play_pause(self, button):
         self._player.play_pause()
+
+    def _on_skip_back(self, button):
+        self._player.seek(-10)
+
+    def _on_skip_forward(self, button):
+        self._player.seek(10)
 
     def _on_fullscreen(self, button):
         win = self.get_root()

@@ -26,6 +26,10 @@ _WINDOW_CSS = """
     box-shadow: none;
     border: none;
     color: alpha(white, 0.9);
+    transition: opacity 300ms ease;
+}
+.gmpv-controls {
+    transition: opacity 300ms ease;
 }
 """
 
@@ -93,10 +97,14 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._overlay.set_vexpand(True)
         main_box.append(self._overlay)
 
-        # Controls overlay (hidden initially)
+        # Controls overlay (hidden initially via opacity for fade transitions)
         self._controls = ControlsBar(self._player)
-        self._controls.set_visible(False)
+        self._controls.set_opacity(0)
+        self._controls.set_can_target(False)
         self._overlay.add_overlay(self._controls)
+
+        # Blank cursor for hiding during playback
+        self._blank_cursor = Gdk.Cursor.new_from_name("none")
 
         # Toast overlay wraps everything
         self._toast_overlay = Adw.ToastOverlay()
@@ -228,11 +236,9 @@ class GmpvWindow(Adw.ApplicationWindow):
     def toggle_fullscreen(self):
         if self._fullscreened:
             self.unfullscreen()
-            self._headerbar.set_visible(True)
             self._fullscreened = False
         else:
             self.fullscreen()
-            self._headerbar.set_visible(False)
             self._fullscreened = True
         self._show_controls()
 
@@ -243,15 +249,22 @@ class GmpvWindow(Adw.ApplicationWindow):
     def _on_click_released(self, gesture, n_press, x, y):
         if n_press == 2:
             self.toggle_fullscreen()
-        elif n_press == 1 and not self._has_file:
-            self.show_open_dialog()
+        elif n_press == 1:
+            if self._has_file:
+                self._player.play_pause()
+            else:
+                self.show_open_dialog()
 
     def _on_mouse_motion(self, ctrl, x, y):
         self._show_controls()
 
     def _show_controls(self):
         if self._has_file:
-            self._controls.set_visible(True)
+            self._controls.set_opacity(1)
+            self._controls.set_can_target(True)
+            self._headerbar.set_opacity(1)
+            self._headerbar.set_can_target(True)
+            self.set_cursor(None)
             self._controls_visible = True
             self._schedule_hide_controls()
 
@@ -261,7 +274,11 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._cursor_hide_id = GLib.timeout_add(2000, self._hide_controls)
 
     def _hide_controls(self):
-        self._controls.set_visible(False)
+        self._controls.set_opacity(0)
+        self._controls.set_can_target(False)
+        self._headerbar.set_opacity(0)
+        self._headerbar.set_can_target(False)
+        self.set_cursor(self._blank_cursor)
         self._controls_visible = False
         self._cursor_hide_id = None
         return False
