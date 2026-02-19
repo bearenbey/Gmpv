@@ -49,6 +49,9 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._cursor_hide_id = None
         self._controls_visible = False
         self._has_file = False
+        self._last_mouse_x = -1.0
+        self._last_mouse_y = -1.0
+        self._click_timeout_id = None
         self._load_css()
         self._setup_ui()
         self._setup_keyboard()
@@ -67,15 +70,12 @@ class GmpvWindow(Adw.ApplicationWindow):
     def _setup_ui(self):
         self.add_css_class("gmpv-window")
 
-        # Main vertical box: headerbar + video
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-
         # Minimal transparent headerbar with just window controls
         self._headerbar = Adw.HeaderBar()
         self._headerbar.add_css_class("gmpv-headerbar")
         self._headerbar.add_css_class("flat")
         self._headerbar.set_show_title(False)
-        main_box.append(self._headerbar)
+        self._headerbar.set_valign(Gtk.Align.START)
 
         # Video area
         backend = _get_display_backend()
@@ -91,11 +91,12 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._video_widget.set_hexpand(True)
         self._video_widget.set_vexpand(True)
 
-        # Overlay for video + controls
+        # Overlay for video + headerbar + controls
         self._overlay = Gtk.Overlay()
         self._overlay.set_child(self._video_widget)
-        self._overlay.set_vexpand(True)
-        main_box.append(self._overlay)
+
+        # Headerbar floats at the top of the video
+        self._overlay.add_overlay(self._headerbar)
 
         # Controls overlay (hidden initially via opacity for fade transitions)
         self._controls = ControlsBar(self._player)
@@ -108,7 +109,7 @@ class GmpvWindow(Adw.ApplicationWindow):
 
         # Toast overlay wraps everything
         self._toast_overlay = Adw.ToastOverlay()
-        self._toast_overlay.set_child(main_box)
+        self._toast_overlay.set_child(self._overlay)
 
         # Set content once
         self.set_content(self._toast_overlay)
@@ -237,6 +238,9 @@ class GmpvWindow(Adw.ApplicationWindow):
         if self._fullscreened:
             self.unfullscreen()
             self._fullscreened = False
+            self._headerbar.set_opacity(1)
+            self._headerbar.set_can_target(True)
+            self.set_cursor(None)
         else:
             self.fullscreen()
             self._fullscreened = True
@@ -248,14 +252,26 @@ class GmpvWindow(Adw.ApplicationWindow):
 
     def _on_click_released(self, gesture, n_press, x, y):
         if n_press == 2:
+            if self._click_timeout_id:
+                GLib.source_remove(self._click_timeout_id)
+                self._click_timeout_id = None
             self.toggle_fullscreen()
         elif n_press == 1:
-            if self._has_file:
-                self._player.play_pause()
-            else:
-                self.show_open_dialog()
+            self._click_timeout_id = GLib.timeout_add(250, self._on_single_click)
+
+    def _on_single_click(self):
+        self._click_timeout_id = None
+        if self._has_file:
+            self._player.play_pause()
+        else:
+            self.show_open_dialog()
+        return False
 
     def _on_mouse_motion(self, ctrl, x, y):
+        if abs(x - self._last_mouse_x) < 1 and abs(y - self._last_mouse_y) < 1:
+            return
+        self._last_mouse_x = x
+        self._last_mouse_y = y
         self._show_controls()
 
     def _show_controls(self):
@@ -276,9 +292,10 @@ class GmpvWindow(Adw.ApplicationWindow):
     def _hide_controls(self):
         self._controls.set_opacity(0)
         self._controls.set_can_target(False)
-        self._headerbar.set_opacity(0)
-        self._headerbar.set_can_target(False)
-        self.set_cursor(self._blank_cursor)
+        if self._fullscreened:
+            self._headerbar.set_opacity(0)
+            self._headerbar.set_can_target(False)
+            self.set_cursor(self._blank_cursor)
         self._controls_visible = False
         self._cursor_hide_id = None
         return False
