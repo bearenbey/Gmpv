@@ -4,6 +4,7 @@ gmpv_sources = [
   'window.py',
   'player.py',
   'controls.py',
+  'util.py',
 ]
 
 python.install_sources(gmpv_sources,

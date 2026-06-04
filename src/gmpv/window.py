@@ -1,3 +1,6 @@
+import ctypes
+import os
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -14,8 +17,22 @@ except (ValueError, ImportError):
     GdkX11 = None
     HAS_GDKX11 = False
 
-from gmpv.player import Player, _get_display_backend
+from gmpv.player import Player
 from gmpv.controls import ControlsBar
+from gmpv.util import add_css_to_display
+
+_GL_FRAMEBUFFER_BINDING = 0x8CA6
+_gl_lib = None
+
+
+def _current_framebuffer():
+    """Return the currently bound GL framebuffer object id."""
+    global _gl_lib
+    if _gl_lib is None:
+        _gl_lib = ctypes.CDLL("libGL.so.1")
+    fbo = ctypes.c_int(0)
+    _gl_lib.glGetIntegerv(_GL_FRAMEBUFFER_BINDING, ctypes.byref(fbo))
+    return fbo.value
 
 _WINDOW_CSS = """
 .gmpv-window {
@@ -49,6 +66,7 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._cursor_hide_id = None
         self._controls_visible = False
         self._has_file = False
+        self._current_filename = None
         self._last_mouse_x = -1.0
         self._last_mouse_y = -1.0
         self._click_timeout_id = None
@@ -59,13 +77,7 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._setup_track_actions()
 
     def _load_css(self):
-        provider = Gtk.CssProvider()
-        provider.load_from_string(_WINDOW_CSS)
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
+        add_css_to_display(_WINDOW_CSS)
 
     def _setup_ui(self):
         self.add_css_class("gmpv-window")
@@ -78,8 +90,7 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._headerbar.set_valign(Gtk.Align.START)
 
         # Video area
-        backend = _get_display_backend()
-        if backend == "wayland":
+        if self._player.backend == "wayland":
             self._video_widget = Gtk.GLArea()
             self._video_widget.set_auto_render(False)
             self._video_widget.connect("realize", self._on_gl_realize)
@@ -116,6 +127,7 @@ class GmpvWindow(Adw.ApplicationWindow):
 
         # Player signals
         self._player.connect("file-loaded", self._on_file_loaded)
+        self._player.connect("end-file", self._on_end_file)
 
         # Mouse motion for auto-hide controls
         motion_ctrl = Gtk.EventControllerMotion()
@@ -167,13 +179,10 @@ class GmpvWindow(Adw.ApplicationWindow):
         self._player.setup_wayland(gl_area)
 
     def _on_gl_render(self, gl_area, gl_context):
-        import ctypes
-        fbo_buf = ctypes.c_int(0)
-        ctypes.cdll.LoadLibrary("libGL.so.1")
-        GL = ctypes.CDLL("libGL.so.1")
-        GL.glGetIntegerv(0x8CA6, ctypes.byref(fbo_buf))  # GL_FRAMEBUFFER_BINDING
         allocation = gl_area.get_allocation()
-        self._player.render_gl(fbo_buf.value, allocation.width, allocation.height)
+        self._player.render_gl(
+            _current_framebuffer(), allocation.width, allocation.height
+        )
         return True
 
     def _setup_keyboard(self):
@@ -328,12 +337,26 @@ class GmpvWindow(Adw.ApplicationWindow):
             pass
 
     def open_file(self, path):
-        if path:
-            self._player.loadfile(path)
-            filename = path.split("/")[-1]
-            self.set_title(filename + " — Gmpv")
-            toast = Adw.Toast(title=filename, timeout=2)
-            self._toast_overlay.add_toast(toast)
+        if not path:
+            return
+        if not os.path.isfile(path):
+            self._show_toast(f"File not found: {os.path.basename(path) or path}")
+            return
+        self._current_filename = os.path.basename(path)
+        self._player.loadfile(path)
+        self.set_title(f"{self._current_filename} — Gmpv")
+        self._show_toast(self._current_filename)
+
+    def _show_toast(self, message):
+        self._toast_overlay.add_toast(Adw.Toast(title=message, timeout=2))
+
+    def _on_end_file(self, player, reason):
+        if reason == "error":
+            name = self._current_filename or "file"
+            self._show_toast(f"Could not play {name}")
+        elif reason == "eof":
+            # Playback finished — surface the controls so the user can replay or seek.
+            self._show_controls()
 
     def do_close_request(self):
         self._player.shutdown()

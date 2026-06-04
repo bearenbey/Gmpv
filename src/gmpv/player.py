@@ -4,17 +4,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import GLib, GObject, Gdk, Gtk
+from gi.repository import GLib, GObject
 
-
-def _get_display_backend():
-    display = Gdk.Display.get_default()
-    display_type = type(display).__name__
-    if "X11" in display_type:
-        return "x11"
-    elif "Wayland" in display_type:
-        return "wayland"
-    return "unknown"
+from gmpv.util import get_display_backend
 
 
 class Player(GObject.Object):
@@ -26,14 +18,23 @@ class Player(GObject.Object):
         "track-list-changed": (GObject.SignalFlags.RUN_LAST, None, ()),
         "file-loaded": (GObject.SignalFlags.RUN_LAST, None, ()),
         "end-file": (GObject.SignalFlags.RUN_LAST, None, (str,)),
-        "eof": (GObject.SignalFlags.RUN_LAST, None, ()),
     }
+
+    # mpv property -> (instance attribute, signal name, signal carries the value)
+    _OBSERVED = (
+        ("time-pos", "position", "position-changed", True),
+        ("duration", "duration", "duration-changed", True),
+        ("pause", "paused", "pause-changed", True),
+        ("volume", "volume", "volume-changed", True),
+        ("track-list", "tracks", "track-list-changed", False),
+    )
 
     def __init__(self):
         super().__init__()
         self._mpv = None
         self._render_ctx = None
-        self._backend = _get_display_backend()
+        self._gl_area = None
+        self._backend = get_display_backend()
         self.duration = 0.0
         self.position = 0.0
         self.paused = True
@@ -93,7 +94,7 @@ class Player(GObject.Object):
         self._observe_properties()
 
     def _on_mpv_render_update(self):
-        if hasattr(self, "_gl_area"):
+        if self._gl_area:
             GLib.idle_add(self._gl_area.queue_render)
 
     def render_gl(self, fbo, width, height):
@@ -104,11 +105,10 @@ class Player(GObject.Object):
             )
 
     def _observe_properties(self):
-        self._mpv.observe_property("time-pos", self._on_time_pos)
-        self._mpv.observe_property("duration", self._on_duration)
-        self._mpv.observe_property("pause", self._on_pause)
-        self._mpv.observe_property("volume", self._on_volume)
-        self._mpv.observe_property("track-list", self._on_track_list)
+        for prop, attr, signal, carries_value in self._OBSERVED:
+            self._mpv.observe_property(
+                prop, self._make_observer(attr, signal, carries_value)
+            )
 
         @self._mpv.event_callback("file-loaded")
         def on_file_loaded(event):
@@ -119,30 +119,17 @@ class Player(GObject.Object):
             reason = event.get("reason", "unknown") if isinstance(event, dict) else "unknown"
             GLib.idle_add(self.emit, "end-file", str(reason))
 
-    def _on_time_pos(self, name, value):
-        if value is not None:
-            self.position = value
-            GLib.idle_add(self.emit, "position-changed", value)
+    def _make_observer(self, attr, signal, carries_value):
+        def handler(name, value):
+            if value is None:
+                return
+            setattr(self, attr, value)
+            if carries_value:
+                GLib.idle_add(self.emit, signal, value)
+            else:
+                GLib.idle_add(self.emit, signal)
 
-    def _on_duration(self, name, value):
-        if value is not None:
-            self.duration = value
-            GLib.idle_add(self.emit, "duration-changed", value)
-
-    def _on_pause(self, name, value):
-        if value is not None:
-            self.paused = value
-            GLib.idle_add(self.emit, "pause-changed", value)
-
-    def _on_volume(self, name, value):
-        if value is not None:
-            self.volume = value
-            GLib.idle_add(self.emit, "volume-changed", value)
-
-    def _on_track_list(self, name, value):
-        if value is not None:
-            self.tracks = value
-            GLib.idle_add(self.emit, "track-list-changed")
+        return handler
 
     def loadfile(self, path):
         if self._mpv:
@@ -178,7 +165,7 @@ class Player(GObject.Object):
         return [t for t in self.tracks if t.get("type") == track_type]
 
     def shutdown(self):
-        if hasattr(self, "_render_ctx") and self._render_ctx:
+        if self._render_ctx:
             self._render_ctx.free()
             self._render_ctx = None
         if self._mpv:

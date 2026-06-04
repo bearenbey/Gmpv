@@ -2,7 +2,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, GObject, Gtk
+from gi.repository import Gio, Gtk
+
+from gmpv.util import add_css_to_display
 
 
 def _format_time(seconds):
@@ -83,13 +85,24 @@ class ControlsBar(Gtk.Box):
         self._connect_signals()
 
     def _load_css(self):
-        provider = Gtk.CssProvider()
-        provider.load_from_string(_CONTROLS_CSS)
-        Gtk.StyleContext.add_provider_for_display(
-            self.get_display() if self.get_display() else __import__("gi").repository.Gdk.Display.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
+        add_css_to_display(_CONTROLS_CSS)
+
+    @staticmethod
+    def _icon_button(icon_name, *extra_classes):
+        button = Gtk.Button(icon_name=icon_name)
+        button.add_css_class("flat")
+        button.add_css_class("circular")
+        for css_class in extra_classes:
+            button.add_css_class(css_class)
+        return button
+
+    @staticmethod
+    def _icon_menu_button(icon_name, menu):
+        button = Gtk.MenuButton(icon_name=icon_name)
+        button.add_css_class("flat")
+        button.add_css_class("circular")
+        button.set_menu_model(menu)
+        return button
 
     def _setup_ui(self):
         self.add_css_class("gmpv-controls")
@@ -136,20 +149,15 @@ class ControlsBar(Gtk.Box):
             hexpand=True,
         )
 
-        self._skip_back_button = Gtk.Button(icon_name="media-seek-backward-symbolic")
-        self._skip_back_button.add_css_class("flat")
-        self._skip_back_button.add_css_class("circular")
+        self._skip_back_button = self._icon_button("media-seek-backward-symbolic")
         center_group.append(self._skip_back_button)
 
-        self._play_button = Gtk.Button(icon_name="media-playback-start-symbolic")
-        self._play_button.add_css_class("flat")
-        self._play_button.add_css_class("circular")
-        self._play_button.add_css_class("gmpv-play-button")
+        self._play_button = self._icon_button(
+            "media-playback-start-symbolic", "gmpv-play-button"
+        )
         center_group.append(self._play_button)
 
-        self._skip_forward_button = Gtk.Button(icon_name="media-seek-forward-symbolic")
-        self._skip_forward_button.add_css_class("flat")
-        self._skip_forward_button.add_css_class("circular")
+        self._skip_forward_button = self._icon_button("media-seek-forward-symbolic")
         center_group.append(self._skip_forward_button)
 
         transport_row.append(center_group)
@@ -161,23 +169,19 @@ class ControlsBar(Gtk.Box):
             halign=Gtk.Align.END,
         )
 
-        self._sub_button = Gtk.MenuButton(icon_name="media-view-subtitles-symbolic")
-        self._sub_button.add_css_class("flat")
-        self._sub_button.add_css_class("circular")
         self._sub_menu = Gio.Menu()
-        self._sub_button.set_menu_model(self._sub_menu)
+        self._sub_button = self._icon_menu_button(
+            "media-view-subtitles-symbolic", self._sub_menu
+        )
         right_group.append(self._sub_button)
 
-        self._audio_button = Gtk.MenuButton(icon_name="audio-speakers-symbolic")
-        self._audio_button.add_css_class("flat")
-        self._audio_button.add_css_class("circular")
         self._audio_menu = Gio.Menu()
-        self._audio_button.set_menu_model(self._audio_menu)
+        self._audio_button = self._icon_menu_button(
+            "audio-speakers-symbolic", self._audio_menu
+        )
         right_group.append(self._audio_button)
 
-        self._fullscreen_button = Gtk.Button(icon_name="view-fullscreen-symbolic")
-        self._fullscreen_button.add_css_class("flat")
-        self._fullscreen_button.add_css_class("circular")
+        self._fullscreen_button = self._icon_button("view-fullscreen-symbolic")
         right_group.append(self._fullscreen_button)
 
         transport_row.append(right_group)
